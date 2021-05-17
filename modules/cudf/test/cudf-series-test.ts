@@ -370,6 +370,18 @@ test('Series.dropNulls (drop nulls only)', () => {
   expect([...result]).toEqual(expected);
 });
 
+test('Series.countNonNulls', () => {
+  const zeroNulls = Series.new([]);
+  const twoNulls  = Series.new(['foo', null, 'bar']);
+  const fourNulls = Series.new([NaN, null, 10, 15, 17, null]);
+  const fiveNulls = Series.new([0, 1, null, 3, 4, null, 6, null]);
+
+  expect(zeroNulls.countNonNulls()).toEqual(0);
+  expect(twoNulls.countNonNulls()).toEqual(2);
+  expect(fourNulls.countNonNulls()).toEqual(4);
+  expect(fiveNulls.countNonNulls()).toEqual(5);
+});
+
 test('FloatSeries.dropNaNs (drop NaN values only)', () => {
   const mask = new Uint8Buffer(BoolVector.from([0, 1, 1, 1, 1, 0]).values);
   const col =
