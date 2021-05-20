@@ -26,7 +26,7 @@ import {Table, ToArrowMetadata} from './table';
 import {CSVToCUDFType, CSVTypeMap, ReadCSVOptions, WriteCSVOptions} from './types/csv';
 import {Bool8, DataType, Float32, Float64, IndexType, Numeric} from './types/dtypes';
 import {NullOrder} from './types/enums';
-import {ColumnsMap, CommonType, TypeMap} from './types/mappings';
+import {ColumnsMap, CommonType, findCommonType, TypeMap} from './types/mappings';
 
 export type SeriesMap<T extends TypeMap> = {
   [P in keyof T]: AbstractSeries<T[P]>
@@ -67,6 +67,74 @@ function _invokeIfNumericSeries<P extends keyof T, T extends TypeMap, R extends 
   series: Series<T[P]>, func: () => Series<R>) {
   if (series instanceof NumericSeries) { return func(); }
   return Series.new(series._col as Column<R>);
+}
+
+function concat<DFs extends DataFrame[]>(...dfs: DFs) {
+  const allNames = [...dfs
+                      .reduce((namesMap, df) => df.names.reduce(
+                                (namesMap, name) => namesMap.set(name, true), namesMap),
+                              new Map<string, boolean>())
+                      .keys()];
+
+  /**
+   * Array<Array<(Column|null)>> -- If a DF has a Column for a given name, it will be in the list
+   * otherwise there will be a null in that slot. For example:
+   * ```
+   * concat(new DataFrame({a, b}), new DataFrame({b, c}))
+   *
+   * columnsPerDF == [
+   *  [dfs[0].get("a"), dfs[0].get("b"),            null],
+   *  [           null, dfs[1].get("b"), dfs[1].get("c")]
+   * ]
+   * ```
+   */
+  const columnsPerDF =
+    dfs.map((df) => allNames.map((name) => df.has(name) ? df.get(name)._col : null));
+
+  // Get first non null dtype, refactor before PR
+  /**
+   * [
+   * [float, float, float],
+   * ]
+   */
+  const firstNonNullDType: any[] = Array(columnsPerDF[0].length).fill(null);
+  for (let colIdx = 0; colIdx < columnsPerDF[0].length; ++colIdx) {
+    const numRows = columnsPerDF.length;
+    for (let rowIdx = 0; rowIdx < numRows; ++rowIdx) {
+      if (columnsPerDF[rowIdx][colIdx] !== null) {
+        firstNonNullDType[colIdx] = columnsPerDF[rowIdx][colIdx].type;
+        // Can break after first found
+      }
+    }
+  }
+
+  const commonTypes: any[] = Array(columnsPerDF[0].length).fill(null);
+  // Find common dtype
+  for (let colIdx = 0; colIdx < columnsPerDF[0].length; ++colIdx) {
+    const numRows = columnsPerDF.length;
+    for (let rowIdx = 0; rowIdx < numRows; ++rowIdx) {
+      if (columnsPerDF[rowIdx][colIdx] !== null) {
+        commonTypes[colIdx] =
+          findCommonType(firstNonNullDType[colIdx], columnsPerDF[rowIdx][colIdx].type);
+      }
+    }
+  }
+
+  for (let colIdx = 0; colIdx < columnsPerDF[0].length; ++colIdx) {
+    const numRows = columnsPerDF.length;
+    for (let rowIdx = 0; rowIdx < numRows; ++rowIdx) {
+      if (columnsPerDF[rowIdx][colIdx] === null) {
+        columnsPerDF[rowIdx][colIdx] = new Column({type: commonTypes[colIdx]});
+      } else {
+        columnsPerDF[rowIdx][colIdx].cast(commonTypes[colIdx]);
+      }
+    }
+  }
+
+  const tables: Table[] = [];
+  columnsPerDF.forEach((column) => {tables.push(new Table({columns: column}));});
+
+  console.log(tables);
 }
 
 /**
@@ -344,13 +412,7 @@ export class DataFrame<T extends TypeMap = any> {
       {} as SeriesMap<{[P in keyof T]: R}>));
   }
 
-  concat<R extends TypeMap>(other: DataFrame<R>, memoryResource?: MemoryResource): DataFrame<T> {
-    const temp       = new Table({columns: this._accessor.columns});
-    const columns    = temp.concat(new Table({columns: other._accessor.columns}), memoryResource);
-    const series_map = {} as SeriesMap<T>;
-
-    return new DataFrame(series_map);
-  }
+  concat<DFs extends DataFrame[]>(...dfs: DFs) { return concat(...[this, ...dfs]); }
 
   /**
    * Generate an ordering that sorts DataFrame columns in a specified way

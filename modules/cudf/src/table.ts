@@ -45,6 +45,8 @@ interface TableConstructor {
   readCSV<T extends CSVTypeMap = any>(options: ReadCSVOptions<T>):
     {names: (keyof T)[], table: Table};
 
+  concat(other: Table, memoryResource?: MemoryResource): Table;
+
   /**
    * Returns a pair of row index vectors corresponding to a full (outer) join between the specified
    * tables.
@@ -116,8 +118,6 @@ export interface Table {
    * Number of rows in each column of the table.
    */
   readonly numRows: number;
-
-  concat(other: Table, memoryResource?: MemoryResource): Table;
 
   /**
    * Return sub-selection from a Table
