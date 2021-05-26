@@ -26,7 +26,7 @@ import {Table, ToArrowMetadata} from './table';
 import {CSVToCUDFType, CSVTypeMap, ReadCSVOptions, WriteCSVOptions} from './types/csv';
 import {Bool8, DataType, Float32, Float64, IndexType, Numeric} from './types/dtypes';
 import {NullOrder} from './types/enums';
-import {ColumnsMap, CommonType, TypeMap} from './types/mappings';
+import {ColumnsMap, CommonType, findCommonType, TypeMap} from './types/mappings';
 
 export type SeriesMap<T extends TypeMap> = {
   [P in keyof T]: AbstractSeries<T[P]>
@@ -67,6 +67,78 @@ function _invokeIfNumericSeries<P extends keyof T, T extends TypeMap, R extends 
   series: Series<T[P]>, func: () => Series<R>) {
   if (series instanceof NumericSeries) { return func(); }
   return Series.new(series._col as Column<R>);
+}
+
+function concat<DFs extends DataFrame[]>(...dfs: DFs) {
+  const allNames = [...dfs
+                      .reduce((namesMap, df) => df.names.reduce(
+                                (namesMap, name) => namesMap.set(name, true), namesMap),
+                              new Map<string, boolean>())
+                      .keys()];
+
+  /**
+   * Array<Array<(Column|null)>> -- If a DF has a Column for a given name, it will be in the list
+   * otherwise there will be a null in that slot. For example:
+   * ```
+   * concat(new DataFrame({a, b}), new DataFrame({b, c}))
+   *
+   * columnsPerDF == [
+   *  [dfs[0].get("a"), dfs[0].get("b"),            null],
+   *  [           null, dfs[1].get("b"), dfs[1].get("c")]
+   * ]
+   * ```
+   */
+  const columnsPerDF =
+    dfs.map((df) => allNames.map((name) => df.has(name) ? df.get(name)._col : null));
+
+  // Get first non null dtype, refactor before PR
+  /**
+   * [
+   * [float, float, float],
+   * ]
+   */
+  const firstNonNullDType: any[] = Array(columnsPerDF[0].length).fill(null);
+  for (let colIdx = 0; colIdx < columnsPerDF[0].length; ++colIdx) {
+    const numRows = columnsPerDF.length;
+    for (let rowIdx = 0; rowIdx < numRows; ++rowIdx) {
+      if (columnsPerDF[rowIdx][colIdx] !== null) {
+        firstNonNullDType[colIdx] = columnsPerDF[rowIdx][colIdx].type;
+        // Can break after first found
+      }
+    }
+  }
+
+  const commonTypes: any[] = Array(columnsPerDF[0].length).fill(null);
+  // Find common dtype
+  for (let colIdx = 0; colIdx < columnsPerDF[0].length; ++colIdx) {
+    const numRows = columnsPerDF.length;
+    for (let rowIdx = 0; rowIdx < numRows; ++rowIdx) {
+      if (columnsPerDF[rowIdx][colIdx] !== null) {
+        commonTypes[colIdx] =
+          findCommonType(firstNonNullDType[colIdx], columnsPerDF[rowIdx][colIdx].type);
+      }
+    }
+  }
+
+  for (let colIdx = 0; colIdx < columnsPerDF[0].length; ++colIdx) {
+    const numRows = columnsPerDF.length;
+    for (let rowIdx = 0; rowIdx < numRows; ++rowIdx) {
+      if (columnsPerDF[rowIdx][colIdx] === null) {
+        columnsPerDF[rowIdx][colIdx] = new Column({
+          type: commonTypes[colIdx],
+          data: new Array<null>(4)
+        });  // TODO: Actually get proper array length
+      } else {
+        columnsPerDF[rowIdx][colIdx].cast(commonTypes[colIdx]);
+      }
+    }
+  }
+
+  const tables: Table[] = [];
+  columnsPerDF.forEach((column) => { tables.push(new Table({columns: column})); });
+  const concatenatedTable = Table.concat(tables);
+
+  console.log(concatenatedTable);
 }
 
 /**
@@ -343,6 +415,8 @@ export class DataFrame<T extends TypeMap = any> {
       (columns, name) => ({...columns, [name]: this.get(name).cast(dataType, memoryResource)}),
       {} as SeriesMap<{[P in keyof T]: R}>));
   }
+
+  concat<DFs extends DataFrame[]>(...dfs: DFs) { return concat(...[this, ...dfs]); }
 
   /**
    * Generate an ordering that sorts DataFrame columns in a specified way
@@ -1200,237 +1274,6 @@ export class DataFrame<T extends TypeMap = any> {
       };
     };
     return new DataFrame(this.names.reduce(mapper, {} as SeriesMap<T>));
-  }
-
-  /**
-   * Compute the exponential (base e, euler number) for all NumericSeries in the DataFrame
-   *
-   * @returns A DataFrame with the operation performed on all NumericSeries
-   * @example
-   * ```typescript
-   * import {DataFrame, Series}  from '@rapidsai/cudf';
-   *
-   * const df = new DataFrame({
-   *  a: Series.new([-1.2, 2.5]);
-   * });
-   * df.exp();
-   * // return {
-   * //    a: [0.30119421191220214, 12.182493960703473],
-   * // }
-   * ```
-   */
-  exp(memoryResource?: MemoryResource): DataFrame<T> {
-    const mapper = (map: SeriesMap<T>, name: string) => {
-      return {
-        ...map,
-        [name]: _invokeIfNumericSeries(
-          this.get(name),
-          () => { return Series.new(this._accessor.get(name).exp(memoryResource)); })
-      };
-    };
-    return new DataFrame(this.names.reduce(mapper, {} as SeriesMap<T>));
-  }
-
-  /**
-   * Compute the natural logarithm (base e) for all NumericSeries in the DataFrame
-   *
-   * @returns A DataFrame with the operation performed on all NumericSeries
-   * @example
-   * ```typescript
-   * import {DataFrame, Series}  from '@rapidsai/cudf';
-   *
-   * const df = new DataFrame({
-   *  a: Series.new([-1.2, 2.5, 4]);
-   * });
-   * df.log();
-   * // return {
-   * //    a: [NaN, 0.9162907318741551, 1.3862943611198906],
-   * // }
-   * ```
-   */
-  log(memoryResource?: MemoryResource): DataFrame<T> {
-    const mapper = (map: SeriesMap<T>, name: string) => {
-      return {
-        ...map,
-        [name]: _invokeIfNumericSeries(
-          this.get(name),
-          () => { return Series.new(this._accessor.get(name).log(memoryResource)); })
-      };
-    };
-    return new DataFrame(this.names.reduce(mapper, {} as SeriesMap<T>));
-  }
-
-  /**
-   * Compute the square-root (x^0.5) for all NumericSeries in the DataFrame
-   *
-   * @returns A DataFrame with the operation performed on all NumericSeries
-   * @example
-   * ```typescript
-   * import {DataFrame, Series}  from '@rapidsai/cudf';
-   *
-   * const df = new DataFrame({
-   *  a: Series.new([-1.2, 2.5, 4]);
-   * });
-   * df.sqrt();
-   * // return {
-   * //    a: [NaN, 1.5811388300841898, 2],
-   * // }
-   * ```
-   */
-  sqrt(memoryResource?: MemoryResource): DataFrame<T> {
-    const mapper = (map: SeriesMap<T>, name: string) => {
-      return {
-        ...map,
-        [name]: _invokeIfNumericSeries(
-          this.get(name),
-          () => { return Series.new(this._accessor.get(name).sqrt(memoryResource)); })
-      };
-    };
-    return new DataFrame(this.names.reduce(mapper, {} as SeriesMap<T>));
-  }
-
-  /**
-   * Compute the cube-root (x^(1.0/3)) for all NumericSeries in the DataFrame
-   *
-   * @returns A DataFrame with the operation performed on all NumericSeries
-   * @example
-   * ```typescript
-   * import {DataFrame, Series}  from '@rapidsai/cudf';
-   *
-   * const df = new DataFrame({
-   *  a: Series.new([-1.2, 2.5]);
-   * });
-   * df.cbrt();
-   * // return {
-   * //    a: [-1.0626585691826111, 1.3572088082974534],
-   * // }
-   * ```
-   */
-  cbrt(memoryResource?: MemoryResource): DataFrame<T> {
-    const mapper = (map: SeriesMap<T>, name: string) => {
-      return {
-        ...map,
-        [name]: _invokeIfNumericSeries(
-          this.get(name),
-          () => { return Series.new(this._accessor.get(name).cbrt(memoryResource)); })
-      };
-    };
-    return new DataFrame(this.names.reduce(mapper, {} as SeriesMap<T>));
-  }
-
-  /**
-   * Compute the smallest integer value not less than arg for all NumericSeries in the DataFrame
-   *
-   * @returns A DataFrame with the operation performed on all NumericSeries
-   * @example
-   * ```typescript
-   * import {DataFrame, Series}  from '@rapidsai/cudf';
-   *
-   * const df = new DataFrame({
-   *  a: Series.new([-1.2, 2.5, -3, 4.6, 5]);
-   * });
-   * df.ceil();
-   * // return {
-   * //    a: [-1, 3, -3, 5, 5],
-   * // }
-   * ```
-   */
-  ceil(memoryResource?: MemoryResource): DataFrame<T> {
-    const mapper = (map: SeriesMap<T>, name: string) => {
-      return {
-        ...map,
-        [name]: _invokeIfNumericSeries(
-          this.get(name),
-          () => { return Series.new(this._accessor.get(name).ceil(memoryResource)); })
-      };
-    };
-    return new DataFrame(this.names.reduce(mapper, {} as SeriesMap<T>));
-  }
-
-  /**
-   * Compute the largest integer value not greater than arg for all NumericSeries in the DataFrame
-   *
-   * @returns A DataFrame with the operation performed on all NumericSeries
-   * @example
-   * ```typescript
-   * import {DataFrame, Series}  from '@rapidsai/cudf';
-   *
-   * const df = new DataFrame({
-   *  a: Series.new([-1.2, 2.5, -3, 4.6, 5]);
-   * });
-   * df.floor();
-   * // return {
-   * //    a: [-2, 2, -3, 4, 5],
-   * // }
-   * ```
-   */
-  floor(memoryResource?: MemoryResource): DataFrame<T> {
-    const mapper = (map: SeriesMap<T>, name: string) => {
-      return {
-        ...map,
-        [name]: _invokeIfNumericSeries(
-          this.get(name),
-          () => { return Series.new(this._accessor.get(name).floor(memoryResource)); })
-      };
-    };
-    return new DataFrame(this.names.reduce(mapper, {} as SeriesMap<T>));
-  }
-
-  /**
-   * Compute the absolute value for all NumericSeries in the DataFrame
-   *
-   * @returns A DataFrame with the operation performed on all NumericSeries
-   * @example
-   * ```typescript
-   * import {DataFrame, Series}  from '@rapidsai/cudf';
-   *
-   * const df = new DataFrame({
-   *  a: Series.new([-1, 2, -3, 4, 5]);
-   * });
-   * df.abs();
-   * // return {
-   * //    a: [1, 2, 3, 4, 5],
-   * // }
-   * ```
-   */
-  abs(memoryResource?: MemoryResource): DataFrame<T> {
-    const mapper = (map: SeriesMap<T>, name: string) => {
-      return {
-        ...map,
-        [name]: _invokeIfNumericSeries(
-          this.get(name),
-          () => { return Series.new(this._accessor.get(name).abs(memoryResource)); })
-      };
-    };
-    return new DataFrame(this.names.reduce(mapper, {} as SeriesMap<T>));
-  }
-
-  /**
-   * Compute the logical not (!) for all NumericSeries in the DataFrame
-   *
-   * @returns A DataFrame with the operation performed on all NumericSeries
-   * @example
-   * ```typescript
-   * import {DataFrame, Series}  from '@rapidsai/cudf';
-   *
-   * const df = new DataFrame({
-   *  a: Series.new([0, 1, 2, 3, 4]);
-   * });
-   * df.not();
-   * // return {
-   * //    a: [true, false, false, false, false],
-   * // }
-   * ```
-   */
-  not(memoryResource?: MemoryResource): DataFrame<{[P in keyof T]: Bool8}> {
-    return new DataFrame(this.names.reduce(
-      (cols, name) => ({
-        ...cols,
-        [name]: _invokeIfNumericSeries(
-          this.get(name),
-          () => { return Series.new(this._accessor.get(name).not(memoryResource)); })
-      }),
-      {} as SeriesMap<{[P in keyof T]: Bool8}>));
   }
 
   /**
