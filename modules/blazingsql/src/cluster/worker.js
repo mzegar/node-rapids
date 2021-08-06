@@ -12,12 +12,33 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+const { BlazingContext, UcpContext } = require('@rapidsai/blazingsql');
+
+// TODO: Centralize and import these
 const CREATE_BLAZING_CONTEXT = 'createBlazingContext';
+const configOptions = {
+  PROTOCOL: 'UCX',
+};
+// TODO:
+
+const ucpContext = new UcpContext();
+let bc = null;
 
 process.on('message', (args) => {
   const { operation, ...rest } = args;
+  const { ctxToken, dataframe, messageId, query, tableName, ucpMetadata } = rest;
 
-  if (operation == CREATE_BLAZING_CONTEXT) { console.log(rest); }
-
-  // const {ctxToken, dataframe, messageId, query, tableName, ucpMetadata} = rest;
+  if (operation == CREATE_BLAZING_CONTEXT) {
+    bc = createContext(process.pid, ucpMetadata);
+  }
 });
+
+function createContext(id, ucpMetadata) {
+  return new BlazingContext({
+    ralId: id,
+    enableLogging: true,
+    ralCommunicationPort: 4000 + id,
+    configOptions: { ...configOptions },
+    workersUcpInfo: ucpMetadata.map((xs) => ({ ...xs, ucpContext })),
+  });
+}

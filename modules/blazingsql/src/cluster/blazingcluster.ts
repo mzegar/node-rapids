@@ -13,6 +13,10 @@
 // limitations under the License.
 
 import {ChildProcess, fork} from 'child_process';
+import {
+  UcpContext,
+} from '../addon';
+import {BlazingContext} from '../blazingcontext';
 
 const CREATE_BLAZING_CONTEXT = 'createBlazingContext';
 
@@ -22,6 +26,7 @@ interface BlazingCusterProps {
 
 export class BlazingCluster {
   workers: ChildProcess[];
+  bc: BlazingContext;
 
   constructor({numWorkers = 1}: BlazingCusterProps) {
     this.workers =
@@ -35,6 +40,14 @@ export class BlazingCluster {
                                                                 }));
 
     this.workers.forEach((worker) => worker.send({operation: CREATE_BLAZING_CONTEXT, ucpMetadata}));
+
+    const ucpContext = new UcpContext();
+    this.bc          = new BlazingContext({
+      ralId: 0,
+      ralCommunicationPort: 4000,
+      configOptions: {...{ PROTOCOL: 'UCX' }},
+      workersUcpInfo: ucpMetadata.map((xs) => ({...xs, ucpContext})),
+    });
   }
 
   // addTable

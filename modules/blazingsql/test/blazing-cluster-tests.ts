@@ -9,5 +9,5 @@ test('create and drop table', async () => {
 
   const bc = new BlazingCluster({numWorkers: 2});
 
-  await delay(2000);
+  await delay(5000);
 });
