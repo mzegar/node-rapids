@@ -107,8 +107,6 @@ if (cluster.isPrimary) {
 
     if (operation === createBlazingContext) {
       console.log(`worker: ${cluster.worker.id}`);
-      console.log(ucpMetadata);
-      console.log(configOptions);
       bc = createContext(cluster.worker.id, ucpMetadata);
     }
 
@@ -129,6 +127,8 @@ function createLargeDataFrame() {
 }
 
 function createContext(id, ucpMetadata) {
+  console.log(`port: ${4000 + id}`);
+  console.log(configOptions);
   console.log(ucpMetadata.map((xs) => ({ ...xs, ucpContext })));
   return new BlazingContext({
     ralId: id,
