@@ -17,19 +17,19 @@ import {BlazingContext} from '../blazingcontext';
 import {CONFIG_OPTIONS, CREATE_BLAZING_CONTEXT} from './blazingcluster';
 
 const ucpContext = new UcpContext();
-let bc;
 
 process.on('message', (args: Record<string, unknown>) => {
   const {operation, ...rest} = args;
 
   if (operation == CREATE_BLAZING_CONTEXT) {
     const ucpMetaData: Record<string, any> = rest['ucpMetadata'] as Record<string, any>;
+    const idx                              = rest['idx'] as number;
 
-    bc = new BlazingContext({
-      ralId: process.pid,
-      ralCommunicationPort: 4000 + process.pid,
+    const bc = new BlazingContext({
+      ralId: idx,
+      ralCommunicationPort: 4000 + idx,
       configOptions: {...CONFIG_OPTIONS},
-      workersUcpInfo: ucpMetaData.map((xs: any) => ({...xs, ucpContext})),
+      workersUcpInfo: ucpMetaData.map((xs: any) => ({...xs, ucpContext}))
     });
 
     console.log(bc);

@@ -33,7 +33,8 @@ export class BlazingCluster {
     const ucpMetadata = ['0', ...Object.keys(this.workers)].map(
       (_, idx) => { return ({workerId: idx.toString(), ip: '0.0.0.0', port: 4000 + idx}); });
 
-    this.workers.forEach((worker) => worker.send({operation: CREATE_BLAZING_CONTEXT, ucpMetadata}));
+    this.workers.forEach((worker, idx) =>
+                           worker.send({operation: CREATE_BLAZING_CONTEXT, idx, ucpMetadata}));
   }
 
   // addTable
