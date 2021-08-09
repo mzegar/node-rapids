@@ -7,27 +7,15 @@ const createTable = 'createTable';
 const runQuery = 'runQuery';
 const queryRan = 'queryRan';
 
-const numberOfWorkers = 2;
+const numberOfWorkers = 1;
 const configOptions = {
   PROTOCOL: 'UCX',
-  ENABLE_TASK_LOGS: true,
-  ENABLE_COMMS_LOGS: true,
-  ENABLE_OTHER_ENGINE_LOGS: true,
-  ENABLE_GENERAL_ENGINE_LOGS: true,
-  LOGGING_FLUSH_LEVEL: 'trace',
-  BLAZING_CACHE_DIRECTORY: '/tmp',
-  BLAZING_LOGGING_DIRECTORY: `${__dirname}/z-log`,
-  BLAZING_LOCAL_LOGGING_DIRECTORY: `${__dirname}/z-log`,
 };
 
 const ucpContext = new UcpContext();
 let bc = null;
 
 if (cluster.isPrimary) {
-
-  const fs = require('fs');
-  fs.rmSync(`${__dirname}/z-log`, { force: true, recursive: true });
-  fs.mkdirSync(`${__dirname}/z-log`);
 
   cluster.setupMaster({ serialization: 'advanced' });
 
@@ -118,6 +106,9 @@ if (cluster.isPrimary) {
     console.log(`message "${operation}":`, rest);
 
     if (operation === createBlazingContext) {
+      console.log(`worker: ${cluster.worker.id}`);
+      console.log(ucpMetadata);
+      console.log(configOptions);
       bc = createContext(cluster.worker.id, ucpMetadata);
     }
 
@@ -140,10 +131,8 @@ function createLargeDataFrame() {
 function createContext(id, ucpMetadata) {
   return new BlazingContext({
     ralId: id,
-    enableLogging: true,
     ralCommunicationPort: 4000 + id,
     configOptions: { ...configOptions },
-    // networkIfaceName: 'eno1',
     workersUcpInfo: ucpMetadata.map((xs) => ({ ...xs, ucpContext })),
   });
 }

@@ -23,11 +23,14 @@ process.on('message', (args: Record<string, unknown>) => {
 
   if (operation == CREATE_BLAZING_CONTEXT) {
     const ucpMetaData: Record<string, any> = rest['ucpMetadata'] as Record<string, any>;
-    const idx                              = rest['idx'] as number;
+
+    console.log(`worker: ${1}`);
+    console.log(ucpMetaData);
+    console.log(CONFIG_OPTIONS);
 
     const bc = new BlazingContext({
-      ralId: idx,
-      ralCommunicationPort: 4000 + idx,
+      ralId: 1,
+      ralCommunicationPort: 9000 + 1,
       configOptions: {...CONFIG_OPTIONS},
       workersUcpInfo: ucpMetaData.map((xs: any) => ({...xs, ucpContext}))
     });
@@ -35,3 +38,17 @@ process.on('message', (args: Record<string, unknown>) => {
     console.log(bc);
   }
 });
+
+// worker: 1
+// [
+//   { workerId: '0', ip: '0.0.0.0', port: 4000 },
+//   { workerId: '1', ip: '0.0.0.0', port: 4001 }
+// ]
+// { PROTOCOL: 'UCX' }
+
+// worker: 1
+// [
+//   { workerId: '0', ip: '0.0.0.0', port: 4000 },
+//   { workerId: '1', ip: '0.0.0.0', port: 4001 }
+// ]
+// { PROTOCOL: 'UCX' }
