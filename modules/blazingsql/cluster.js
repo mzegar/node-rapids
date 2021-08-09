@@ -129,6 +129,7 @@ function createLargeDataFrame() {
 }
 
 function createContext(id, ucpMetadata) {
+  console.log(ucpMetadata.map((xs) => ({ ...xs, ucpContext })));
   return new BlazingContext({
     ralId: id,
     ralCommunicationPort: 4000 + id,

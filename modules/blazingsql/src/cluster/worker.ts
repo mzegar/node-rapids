@@ -27,6 +27,7 @@ process.on('message', (args: Record<string, unknown>) => {
     console.log(`worker: ${1}`);
     console.log(ucpMetaData);
     console.log(CONFIG_OPTIONS);
+    console.log(ucpMetaData.map((xs: any) => ({...xs, ucpContext})));
 
     const bc = new BlazingContext({
       ralId: 1,
