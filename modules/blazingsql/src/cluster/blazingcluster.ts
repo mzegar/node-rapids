@@ -14,7 +14,10 @@
 
 import {ChildProcess, fork} from 'child_process';
 
-const CREATE_BLAZING_CONTEXT = 'createBlazingContext';
+export const CREATE_BLAZING_CONTEXT = 'createBlazingContext';
+export const CONFIG_OPTIONS         = {
+  PROTOCOL: 'UCX',
+};
 
 interface BlazingCusterProps {
   numWorkers: number;
@@ -35,6 +38,4 @@ export class BlazingCluster {
 
   // addTable
   // await sql
-
-  wip() { console.log(this.workers); }
 }

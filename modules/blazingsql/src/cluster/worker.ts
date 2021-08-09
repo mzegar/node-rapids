@@ -12,32 +12,26 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-process.on('message', (args) => { console.log(args); });
+import {UcpContext} from '../addon';
+import {BlazingContext} from '../blazingcontext';
+import {CONFIG_OPTIONS, CREATE_BLAZING_CONTEXT} from './blazingcluster';
 
-// const { BlazingContext, UcpContext, ContextProp } = require('@rapidsai/blazingsql');
+const ucpContext = new UcpContext();
+let bc;
 
-// // TODO: Centralize and import these
-// const CREATE_BLAZING_CONTEXT = 'createBlazingContext';
-// const configOptions = {
-//   PROTOCOL: 'UCX',
-// };
-// // TODO:
+process.on('message', (args: Record<string, unknown>) => {
+  const {operation, ...rest} = args;
 
-// const ucpContext = new UcpContext();
-// console.log(`Creating context:${ucpContext}`);
-// let bc = null;
+  if (operation == CREATE_BLAZING_CONTEXT) {
+    const ucpMetaData: Record<string, any> = rest['ucpMetadata'] as Record<string, any>;
 
-// process.on('message', (args) => {
-//   const { operation, ...rest } = args;
-//   const { ctxToken, dataframe, messageId, query, tableName, ucpMetadata } = rest;
+    bc = new BlazingContext({
+      ralId: process.pid,
+      ralCommunicationPort: 4000 + process.pid,
+      configOptions: {...CONFIG_OPTIONS},
+      workersUcpInfo: ucpMetaData.map((xs: any) => ({...xs, ucpContext})),
+    });
 
-//   if (operation == CREATE_BLAZING_CONTEXT) {
-//     console.log("New Context created\n");
-//     bc = new BlazingContext({
-//       ralId: process.pid,
-//       ralCommunicationPort: 4000 + process.pid,
-//       configOptions: { ...configOptions },
-//       workersUcpInfo: ucpMetadata.map((xs) => ({ ...xs, ucpContext })),
-//     });
-//   }
-// });
+    console.log(bc);
+  }
+});
