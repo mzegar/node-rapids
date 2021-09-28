@@ -31,6 +31,7 @@ import {
   CatalogTableImpl,
   RelationalAlgebraGenerator
 } from './algebra';
+import {BlazingTable, cudfTypeToCsvType} from './blazingtable';
 import {defaultContextConfigValues} from './config';
 import {EmptyExecutionGraph, ExecutionGraph} from './execution_graph';
 import {json_plan_py} from './json_plan';
@@ -83,18 +84,68 @@ export class BlazingContext {
 
   // Temp definition, merge with createTable probably.
   createTableCSV(tableName: string, input: string[]): void {
-    console.log(tableName);
     const schema       = parseSchema(input, 'csv', [], [], false);
     const mappingFiles = {'localhost': schema['files']};
 
-    console.log(schema);
-    console.log(mappingFiles);
+    const bTable = new BlazingTable(tableName,
+                                    schema['files'] as string[],
+                                    schema['file_type'] as number,
+                                    input,
+                                    schema['calcite_to_file_indices'] as number[],
+                                    {},
+                                    [],
+                                    [],
+                                    false,
+                                    mappingFiles);
 
-    const uriValues: any[] = [];
-    const fileType         = schema['file_type'];
+    bTable.columnNames     = schema['names'] as string[];
+    bTable.fileColumnNames = schema['names'] as string[];
+    bTable.columnTypes     = schema['types'] as number[];
 
-    console.log(uriValues);
-    console.log(fileType);
+    bTable.args['names']          = bTable.columnNames;
+    bTable.args['has_header_csv'] = schema['has_header_csv'];
+
+    const dtypes = [];
+    for (let i = 0; i < bTable.columnTypes.length; ++i) {
+      const dtype = cudfTypeToCsvType(bTable.columnTypes[i]);
+      if (dtype.includes('timestamp')) {
+        dtypes.push('date64');
+      } else {
+        dtypes.push(dtype);
+      }
+    }
+    bTable.args['dtype'] = dtypes;
+
+    if (bTable.localFiles) {
+      bTable.slices =
+        bTable.getSlices(this.workers.length);  // TODO: length of nodes, I'm assuming workers.
+    } else {
+      bTable.slices = bTable.getSlicesByWorker(this.workers.length);
+    }
+
+    schema['args']                                                      = {};
+    (schema['args'] as Record<string, unknown>)['max_bytes_chunk_read'] = 268435456;
+
+    this.createTableTemp(tableName, bTable);
+  }
+
+  createTableTemp(tableName: string, input: BlazingTable): void {
+    callMethodSync(this.db, 'removeTable', tableName);
+    // this.tables.set(tableName, input);
+
+    const arr = ArrayList();
+    input.columnNames.forEach((name: string, index: number) => {
+      const dataType =
+        callStaticMethodSync('com.blazingdb.calcite.catalog.domain.CatalogColumnDataType',
+                             'fromTypeId',
+                             input.columnTypes[index]);
+      const column = CatalogColumnImpl([name, dataType, index]);
+      callMethodSync(arr, 'add', column);
+    });
+    const tableJava = CatalogTableImpl([tableName, this.db, arr]);
+    callMethodSync(this.db, 'addTable', tableJava);
+    this.schema    = BlazingSchema(this.db);
+    this.generator = RelationalAlgebraGenerator(this.schema);
   }
 
   /**
