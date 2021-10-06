@@ -202,7 +202,7 @@ ExecutionGraph::wrapper_t run_generate_graph(
         nullptr                    // std::shared_ptr<arrow::Table> arrow_tabl
       });
       table_schema_cpp_arg_keys.push_back({"has_header_csv"});
-      table_schema_cpp_arg_values.push_back({!has_header_csv ? "True" : "False"});
+      table_schema_cpp_arg_values.push_back({has_header_csv ? "True" : "False"});
       files_all.push_back(files);
       file_types.push_back(ral::io::DataType::CSV);
       uri_values.push_back({});
@@ -215,16 +215,17 @@ ExecutionGraph::wrapper_t run_generate_graph(
         names,                     // std::vector<std::string> names
         {},                        // std::vector<size_t> calcite_to_file_indices
         {},                        // std::vector<bool> in_file
-        ral::io::DataType::CUDF,   // int data_type
+        ral::io::DataType::CSV,    // int data_type
         false,                     // bool has_header_csv = false
         {cudf::table_view{}, {}},  // ral::frame::BlazingTableView metadata
         {{0}},                     // std::vector<std::vector<int>> row_groups_ids
         nullptr                    // std::shared_ptr<arrow::Table> arrow_tabl
       });
-      table_schema_cpp_arg_keys.push_back({});
-      table_schema_cpp_arg_values.push_back({});
-      files_all.push_back({""});
-      file_types.push_back(ral::io::DataType::CUDF);
+      table_schema_cpp_arg_keys.push_back({"has_header_csv"});
+      table_schema_cpp_arg_values.push_back({has_header_csv ? "True" : "False"});
+      files_all.push_back(
+        {"/opt/rapids/node/modules/demo/sql/sql-cluster-server/data/wiki_page_1.csv"});
+      file_types.push_back(ral::io::DataType::CSV);
       uri_values.push_back({});
     }
   }
