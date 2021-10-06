@@ -22,18 +22,17 @@ export interface ParsedSchema {
   names: string[];
   calciteToFileIndicies: number[];
   hasHeaderCSV: boolean;
+  isEmpty: boolean;
 }
 
 export class SQLTable {
   public readonly tableName: string;
   public readonly tableSource: TableSource;
 
-  constructor(tableName: string, input: DataFrame|string[]) {
+  constructor(tableName: string, input: DataFrame|string[]|ParsedSchema) {
     this.tableName = tableName;
 
-    this.tableSource = input instanceof DataFrame ? new DataFrameTable(input)
-                       : input.length == 0        ? new DataFrameTable(new DataFrame())
-                                                  : new CSVTable(input);
+    this.tableSource = input instanceof DataFrame ? new DataFrameTable(input) : new CSVTable(input);
   }
 }
 
@@ -46,7 +45,9 @@ interface TableSource {
 class CSVTable implements TableSource {
   private schema: ParsedSchema;
 
-  constructor(input: string[]) { this.schema = parseSchema(input); }
+  constructor(input: string[]|ParsedSchema) {
+    this.schema = Array.isArray(input) ? parseSchema(input) : input;
+  }
 
   get names(): string[] { return this.schema.names; }
   getSource() { return this.schema; }

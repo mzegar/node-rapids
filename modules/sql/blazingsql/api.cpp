@@ -176,34 +176,57 @@ ExecutionGraph::wrapper_t run_generate_graph(
 
     std::vector<std::string> names               = schema.Get("names");
     std::vector<std::string> files               = schema.Get("files");
-    std::vector<size_t> calcite_to_file_indicies = schema.Get("calcite_to_file_indices");
+    std::vector<size_t> calcite_to_file_indicies = schema.Get("calciteToFileIndicies");
 
     std::vector<int32_t> type_ints = schema.Get("types");
     std::vector<cudf::type_id> type_ids;
     type_ids.reserve(type_ints.size());
     for (auto const& type : type_ints) { type_ids.push_back(cudf::type_id(type)); }
 
-    bool has_header_csv = schema.Get("has_header_csv");
+    bool has_header_csv = schema.Get("hasHeaderCSV");
+    bool isEmpty        = schema.Get("isEmpty");
 
-    table_schemas.push_back({
-      {},                        // std::vector<ral::frame::BlazingTableView> blazingTableViews
-      type_ids,                  // std::vector<cudf::type_id> types
-      files,                     // std::vector<std::string> files
-      files,                     // std::vector<std::string> datasource TODO could be wrong.
-      names,                     // std::vector<std::string> names
-      calcite_to_file_indicies,  // std::vector<size_t> calcite_to_file_indices
-      {},                        // std::vector<bool> in_file
-      ral::io::DataType::CSV,    // int data_type
-      has_header_csv,            // bool has_header_csv = false
-      {cudf::table_view{}, {}},  // ral::frame::BlazingTableView metadata
-      {{0}},                     // std::vector<std::vector<int>> row_groups_ids
-      nullptr                    // std::shared_ptr<arrow::Table> arrow_tabl
-    });
-    table_schema_cpp_arg_keys.push_back({"has_header_csv"});
-    table_schema_cpp_arg_values.push_back({!has_header_csv ? "True" : "False"});
-    files_all.push_back(files);
-    file_types.push_back(ral::io::DataType::CSV);
-    uri_values.push_back({});
+    if (!isEmpty) {
+      table_schemas.push_back({
+        {},                        // std::vector<ral::frame::BlazingTableView> blazingTableViews
+        type_ids,                  // std::vector<cudf::type_id> types
+        files,                     // std::vector<std::string> files
+        files,                     // std::vector<std::string> datasource TODO could be wrong.
+        names,                     // std::vector<std::string> names
+        calcite_to_file_indicies,  // std::vector<size_t> calcite_to_file_indices
+        {},                        // std::vector<bool> in_file
+        ral::io::DataType::CSV,    // int data_type
+        has_header_csv,            // bool has_header_csv = false
+        {cudf::table_view{}, {}},  // ral::frame::BlazingTableView metadata
+        {{0}},                     // std::vector<std::vector<int>> row_groups_ids
+        nullptr                    // std::shared_ptr<arrow::Table> arrow_tabl
+      });
+      table_schema_cpp_arg_keys.push_back({"has_header_csv"});
+      table_schema_cpp_arg_values.push_back({!has_header_csv ? "True" : "False"});
+      files_all.push_back(files);
+      file_types.push_back(ral::io::DataType::CSV);
+      uri_values.push_back({});
+    } else {
+      table_schemas.push_back({
+        {},                        // std::vector<ral::frame::BlazingTableView> blazingTableViews
+        type_ids,                  // std::vector<cudf::type_id> types
+        {},                        // std::vector<std::string> files
+        {},                        // std::vector<std::string> datasource TODO could be wrong.
+        names,                     // std::vector<std::string> names
+        {},                        // std::vector<size_t> calcite_to_file_indices
+        {},                        // std::vector<bool> in_file
+        ral::io::DataType::CUDF,   // int data_type
+        false,                     // bool has_header_csv = false
+        {cudf::table_view{}, {}},  // ral::frame::BlazingTableView metadata
+        {{0}},                     // std::vector<std::vector<int>> row_groups_ids
+        nullptr                    // std::shared_ptr<arrow::Table> arrow_tabl
+      });
+      table_schema_cpp_arg_keys.push_back({});
+      table_schema_cpp_arg_values.push_back({});
+      files_all.push_back({""});
+      file_types.push_back(ral::io::DataType::CUDF);
+      uri_values.push_back({});
+    }
   }
 
   auto result = ::runGenerateGraph(masterIndex,

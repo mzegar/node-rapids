@@ -32,7 +32,7 @@ import {
 import {defaultContextConfigValues} from './config';
 import {ExecutionGraph} from './graph';
 import {json_plan_py} from './json_plan';
-import {DataFrameTable, SQLTable} from './table';
+import {DataFrameTable, ParsedSchema, SQLTable} from './table';
 
 export class SQLContext {
   public readonly context: Context;
@@ -95,8 +95,10 @@ export class SQLContext {
    * sqlContext.createTable('test_table', df);
    * ```
    */
-  createTable(tableName: string, input: DataFrame|string[]): void {
+  createTable(tableName: string, input: DataFrame|string[]|ParsedSchema): void {
     callMethodSync(this._db, 'removeTable', tableName);
+
+    console.log(input);
 
     const table = new SQLTable(tableName, input);
     this._tables.set(tableName, table);

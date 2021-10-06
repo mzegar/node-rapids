@@ -14,6 +14,7 @@
 
 import {ContextProps, UcpContext} from '../addon';
 import {SQLContext} from '../context';
+import {ParsedSchema} from '../table';
 
 let context: SQLContext;
 
@@ -30,8 +31,8 @@ async function createTable({name, table_id}: {name: string, table_id: string}) {
   context.createTable(name, await context.pull(table_id));
 }
 
-function createCSVTable({name, paths}: {name: string, paths: string[]}) {
-  context.createTable(name, paths);
+function createCSVTable({name, schema}: {name: string, schema: ParsedSchema}) {
+  context.createTable(name, schema);
 }
 
 async function sql({uuid, query, token}: {uuid: string, query: string, token: number}) {

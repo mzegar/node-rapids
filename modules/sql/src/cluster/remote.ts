@@ -22,6 +22,7 @@ import * as Path from 'path';
 import {ContextProps} from '../addon';
 
 import {SQLCluster, Worker} from '../cluster';
+import {ParsedSchema} from '../table';
 
 const remoteWorkerPath =
   Path.resolve(__dirname.includes('/src') ? `${__dirname}/../../build/js/cluster/worker.js`
@@ -68,8 +69,8 @@ export class RemoteSQLWorker implements Worker {
     return this._send({type: 'createTable', name, table_id}).then(() => undefined);
   }
 
-  public createCSVTable(name: string, paths: string[]) {
-    return this._send({type: 'createCSVTable', name, paths}).then(() => undefined);
+  public createCSVTable(name: string, schema: ParsedSchema) {
+    return this._send({type: 'createCSVTable', name, schema}).then(() => undefined);
   }
 
   public dropTable(name: string) {

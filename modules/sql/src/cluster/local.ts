@@ -17,6 +17,7 @@
 import {ContextProps, UcpContext} from '../addon';
 import {Worker} from '../cluster';
 import {SQLContext} from '../context';
+import {ParsedSchema} from '../table';
 
 export class LocalSQLWorker implements Worker {
   declare public readonly id: number;
@@ -38,8 +39,8 @@ export class LocalSQLWorker implements Worker {
     await this.context.createTable(name, await this.context.pull(table_id));
   }
 
-  public async createCSVTable(name: string, paths: string[]) {
-    await this.context.createTable(name, paths);
+  public async createCSVTable(name: string, schema: ParsedSchema) {
+    await this.context.createTable(name, schema);
   }
 
   public async dropTable(name: string) { await this.context.dropTable(name); }

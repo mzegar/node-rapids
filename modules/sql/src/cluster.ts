@@ -17,10 +17,11 @@
 import {Device} from '@nvidia/cuda';
 import {DataFrame} from '@rapidsai/cudf';
 
-import {ContextProps} from './addon';
+import {ContextProps, parseSchema} from './addon';
 import {LocalSQLWorker} from './cluster/local';
 import {RemoteSQLWorker} from './cluster/remote';
 import {defaultClusterConfigValues} from './config';
+import {ParsedSchema} from './table';
 
 export interface Worker {
   readonly id: number;
@@ -28,7 +29,7 @@ export interface Worker {
   dropTable(name: string): Promise<void>;
   sql(query: string, token: number): Promise<DataFrame>;
   createTable(name: string, table_id: string): Promise<void>;
-  createCSVTable(name: string, paths: string[]): Promise<void>;
+  createCSVTable(name: string, schema: ParsedSchema): Promise<void>;
   createContext(props: Omit<ContextProps, 'id'>): Promise<void>;
 }
 
@@ -55,6 +56,7 @@ export class SQLCluster {
    */
   public static async init(options: Partial<ClusterProps>&Partial<ContextProps> = {}) {
     const {numWorkers = Device.numDevices, ip = '0.0.0.0', port = 4000} = options;
+    if (numWorkers == 3) { console.log(numWorkers); }
     const {
       networkIfaceName = 'lo',
       allocationMode   = 'cuda_memory_resource',
@@ -63,7 +65,7 @@ export class SQLCluster {
       enableLogging    = false,
     }                   = options;
     const configOptions = {...defaultClusterConfigValues, ...options.configOptions};
-    const cluster       = new SQLCluster(Math.min(numWorkers, Device.numDevices));
+    const cluster       = new SQLCluster(Math.min(2, 2));
     await cluster._createContexts({
       ip,
       port,
@@ -87,10 +89,7 @@ export class SQLCluster {
     this._worker = new LocalSQLWorker(0);
     this._workers =
       Array
-        .from({length: numWorkers},
-              (_, i) => i === 0
-                          ? this._worker
-                          : new RemoteSQLWorker(this, i, {...process.env, CUDA_VISIBLE_DEVICES: i}))
+        .from({length: numWorkers}, (_, i) => i === 0 ? this._worker : new RemoteSQLWorker(this, i))
         .reverse();
   }
 
@@ -132,8 +131,16 @@ export class SQLCluster {
       for (let i = this._workers.length; i > 0; i--) {
         chunkedPaths.push(input.splice(0, Math.ceil(input.length / i)));
       }
-      await Promise.all(
-        this._workers.map((worker, i) => worker.createCSVTable(tableName, chunkedPaths[i])));
+      await Promise.all(this._workers.map((worker, i) => {
+        let isEmpty = false;
+        if (chunkedPaths[i].length == 0) {
+          chunkedPaths[i] = chunkedPaths[i - 1];
+          isEmpty         = true;
+        }
+        const schema   = parseSchema(chunkedPaths[i]);
+        schema.isEmpty = isEmpty;
+        return worker.createCSVTable(tableName, schema);
+      }));
     }
   }
 
