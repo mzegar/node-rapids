@@ -14,17 +14,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-module.exports = (glfwOptions = {
-  title: 'Spatial Demo',
-  transparent: false
-}) => {
-  return require('@rapidsai/jsdom').RapidsJSDOM.fromReactComponent('./app.jsx', {
-    glfwOptions,
-    // Change cwd to the example dir so relative file paths are resolved
-    module: {path: __dirname},
-  });
-};
+const fastify = require('fastify')();
 
-if (require.main === module) {
-  module.exports().window.addEventListener('close', () => process.exit(0), {once: true});
-}
+fastify  //
+  .register(require('./plugins/webrtc'), require('./plugins/point-cloud')(fastify))
+  .register(require('fastify-static'), {root: require('path').join(__dirname, 'public')})
+  .get('/', (req, reply) => reply.sendFile('video.html'));
+
+fastify.listen(8080).then(() => console.log('server ready'));
